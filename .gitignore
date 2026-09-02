@@ -1,0 +1,16 @@
+# 测试文件（不提交）
+test_*.js
+
+# Excel 过程文件：原始排课表与临时锁文件（不提交）
+*.xlsx
+~$*.xlsx
+
+# 导出的课表图片（用户本地产物，不提交）
+*.png
+
+# 系统与编辑器文件
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
