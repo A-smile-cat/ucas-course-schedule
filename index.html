@@ -257,6 +257,13 @@ body{
   display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
   word-break:break-all;
 }
+.ci .ci-cat{
+  display:inline-block;
+  font-size:9px; font-weight:400; line-height:1.45;
+  color:#fff; border-radius:2px;
+  padding:0 4px; margin-left:5px;
+  letter-spacing:.5px; white-space:nowrap;
+}
 .ci .tc, .ci .lc{
   font-size:calc(var(--ttfs, 12px) * 0.8); color:var(--ink-2); line-height:1.2;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
@@ -1193,19 +1200,22 @@ const Core = {
         /* 老师/教室/周次超宽截断 */
         const metaMaxCh = Math.max(6, Math.floor((w - 18) / fs.meta));
         const clipTxt = t => (t.length > metaMaxCh ? t.slice(0, metaMaxCh) + "…" : t);
+        const catTxt = c.type ? esc(clipTxt(c.type)) : "";
         const teacher = c.teacher ? esc(clipTxt(c.teacher)) : "";
         const location = c.location ? esc(clipTxt(c.location)) : "";
         const weeksTxt = esc(clipTxt(Core.weeksText(it.slot.weeks)));
-        /* 行数分配：先保证老师/教室/周次各 1 行，剩余给课程名 */
-        const extra = (teacher ? 1 : 0) + (location ? 1 : 0) + 1;
+        /* 行数分配：先保证类别/老师/教室/周次各 1 行，剩余给课程名 */
+        const extra = (catTxt ? 1 : 0) + (teacher ? 1 : 0) + (location ? 1 : 0) + 1;
         const avail = Math.max(1, Math.floor((h - 8) / lineH));
         const showName = Math.max(1, Math.min(nameLines.length, avail - extra));
-        const lines = [...nameLines.slice(0, showName), teacher, location, weeksTxt].filter(Boolean);
+        const lines = [...nameLines.slice(0, showName), catTxt, teacher, location, weeksTxt].filter(Boolean);
         const top = y + Math.max(4, (h - lines.length * lineH) / 2) + 12;
         lines.forEach((ln, i) => {
           const isName = i < showName;
+          const isCat = i === showName;
+          const fill = isName ? "#2b2417" : (isCat ? colr : (i === lines.length - 1 ? "#7d2417" : "#6f6350"));
           S.push('<text x="' + tx + '" y="' + (top + i * lineH) + '" font-family="' + FONT + '" font-size="' + (isName ? fs.nm : fs.meta) + '"' +
-            (isName ? ' font-weight="bold" fill="#2b2417"' : ' fill="' + (i === lines.length - 1 ? "#7d2417" : "#6f6350") + '"') + ">" + ln + "</text>");
+            (isName ? ' font-weight="bold"' : "") + ' fill="' + fill + '">' + ln + "</text>");
         });
         if (dd2){
           S.push('<rect x="' + (x + w - 52) + '" y="' + (y + 4) + '" width="44" height="17" rx="2" fill="#e3c06b" stroke="#c9a046"/>');
@@ -1417,7 +1427,9 @@ function renderTimetable(opts){
           '<button class="del" title="删除课程">✕</button>' +
         "</div>" +
         (dd2 ? '<span class="dd2-badge" title="专业学位课">学位课</span>' : "") +
-        '<div class="nm">' + esc(c.name) + "</div>" +
+        '<div class="nm">' + esc(c.name) +
+          '<span class="ci-cat" style="background:' + (TYPE_COLOR[c.type] || "#6f6350") + '">' + esc(c.type) + "</span>" +
+        "</div>" +
         tHtml + lHtml +
         '<div class="wks">' + esc(Core.weeksText(it.slot.weeks)) + "</div>";
       ci.title = esc(c.name) + "　" + (meta ? meta + "　" : "") + Core.weeksText(it.slot.weeks) + (dd2 ? "　【专业学位课】" : "");
