@@ -8,6 +8,8 @@
 ![Dependencies](https://img.shields.io/badge/dependencies-0-green)
 ![Offline](https://img.shields.io/badge/offline-supported-success)
 ![Data](https://img.shields.io/badge/data-localStorage-yellow)
+[![WeChat](https://img.shields.io/badge/微信公众号-程序喵有话说-brightgreen)](Contact%20the%20author.md)
+[![Bilibili](https://img.shields.io/badge/B站-程序喵有话说-ff69b4)](https://space.bilibili.com/1029501219)
 
 ## 项目简介
 
@@ -76,3 +78,15 @@
 - **转发须保留**：授权转发时必须完整保留 LICENSE 全文并注明出处
 
 详细条款见 [LICENSE](LICENSE)。如需授权或合作，见 [联系作者](Contact%20the%20author.md)。
+
+## 联系作者
+
+**微信公众号：程序喵有话说**
+
+![author-wx](author-wx.png)
+
+**B站**：程序喵有话说（[点击访问空间](https://space.bilibili.com/1029501219)）
+
+**QQ**：2976377647　**邮箱**：2976377647@qq.com
+
+完整联系方式见 [Contact the author.md](Contact%20the%20author.md)。
