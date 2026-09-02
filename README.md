@@ -81,9 +81,7 @@
 
 ## 联系作者
 
-**微信公众号：程序喵有话说**
-
-![author-wx](author-wx.png)
+**微信公众号：程序喵有话说**（微信二维码见 [Contact the author.md](Contact%20the%20author.md)）
 
 **B站**：程序喵有话说（[点击访问空间](https://space.bilibili.com/1029501219)）
 
