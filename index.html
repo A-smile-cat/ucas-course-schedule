@@ -1056,9 +1056,11 @@ const Core = {
       const blocks = [];
       for (const e of m.values()){
         const weeks = [...e.weeks].sort((a, b) => a - b);
-        blocks.push(makeBlock(e.course, weeks));
+        blocks.push({w0: weeks[0] || 21, txt: makeBlock(e.course, weeks)});
       }
-      return blocks.join("\n\n");   // 课程块间以空行分隔
+      /* 同一时段多门课：按开课周次先后排序（先开课的块放在上方） */
+      blocks.sort((x, y) => x.w0 - y.w0 || (x.txt < y.txt ? -1 : 1));
+      return blocks.map(b => b.txt).join("\n\n");   // 课程块间以空行分隔
     }));
 
     /* 3. 合并：按星期列，连续数据行文本相同且非空 → 跨行合并；
