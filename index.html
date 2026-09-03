@@ -704,8 +704,8 @@ body{
         <label class="ex-opt" id="ex-opt-excel">
           <input type="radio" name="ex-kind" value="excel">
           <div>
-            <div class="ex-t">② Excel 总表</div>
-            <div class="ex-d">所有课程（已排 + 候选）的排课一览表：课程名、类别、专业学位课、教师、教室、状态、上课时间。便于归档、共享、打印。</div>
+            <div class="ex-t">② Excel 课表</div>
+            <div class="ex-d">课表格式（与「秋季选课排课表」一致）：行为节次、列为周一至周日；同一时段多门课用分号分隔，连堂自动合并单元格。便于打印与核对。</div>
             <div class="ex-wip">⚠ 暂不完善，等待改进</div>
           </div>
         </label>
@@ -1012,44 +1012,106 @@ const Core = {
       ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&apos;"}[ch]));
   },
 
-  /* --- Excel 总表（.xlsx）生成：所有课程排课一览 ---
-       courses → Uint8Array（可直接保存为 .xlsx） */
-  buildExcel(courses){
+  /* --- Excel 课表（.xlsx）生成：模仿「秋季选课排课表」格式 ---
+       第 1 列节次序号、第 2 列时间，其后 7 列为周一~周日；
+       同一时段多门课用分号「；」分隔；连堂（连续节次、内容相同）自动跨行合并单元格。
+       scheduled: 已排课程列表 → Uint8Array */
+  buildExcel(scheduled){
     const esc = Core.xmlEsc;
-    const headers = ["课程名","类别","专业学位课","教师","教室","状态","上课时间"];
-    const rows = courses.map(c => [
-      c.name,
-      c.type,
-      c.dd2 ? "是" : "否",
-      c.teacher || "",
-      c.location || "",
-      c.inTimetable ? "已排课表" : "候选区",
-      (c.slots || []).map(s => Core.slotText(s)).join("；")
-    ]);
-    const widths = [24, 14, 12, 12, 18, 12, 70];
+    /* 15 个数据行：13 节课 + 第 4/5、9/10 节之间两行休息（与原始表一致），
+       数据行号 = 表头(1) + di，即 di 0..14 → Excel 行 2..16 */
+    const rowList = [];
+    for (const p of PERIODS){
+      rowList.push(p);
+      if (p.n === 4 || p.n === 9) rowList.push(null);   // 休息空行
+    }
+    const diOf = p => p - 1 + (p > 4 ? 1 : 0) + (p > 9 ? 1 : 0);
 
-    /* sharedStrings 表 */
+    /* 1. 聚合每格课程：cell[di][dayIdx] = Map(courseId → {name, weeks:Set}) */
+    const cell = Array.from({length: 15}, () => Array.from({length: 7}, () => new Map()));
+    for (const c of scheduled){
+      for (const s of c.slots || []){
+        if (!(s.day >= 1 && s.day <= 7) || !s.periods || !s.periods.length) continue;
+        for (const p of s.periods){
+          if (p < 1 || p > 13) continue;
+          const m = cell[diOf(p)][s.day - 1];
+          let e = m.get(c.id);
+          if (!e){ e = {name: c.name, weeks: new Set()}; m.set(c.id, e); }
+          (s.weeks || []).forEach(w => e.weeks.add(w));
+        }
+      }
+    }
+
+    /* 2. 每格文本：课程名（周次），多门课用「；」分隔；覆盖全部 20 周时省略周次 */
+    const texts = cell.map(row => row.map(m => {
+      const parts = [];
+      for (const e of m.values()){
+        const weeks = [...e.weeks].sort((a, b) => a - b);
+        parts.push(weeks.length >= 20 ? e.name : e.name + "（" + Core.weeksText(weeks) + "）");
+      }
+      return parts.join("；");
+    }));
+
+    /* 3. 合并：按星期列，连续数据行文本相同且非空 → 跨行合并；
+          合并区域非顶部行的单元格留空（规范要求，内容只保留在左上角） */
+    const merges = [];
+    const skipCells = new Set();               // "di,d"：合并区内被跳过的非顶部格
+    for (let d = 0; d < 7; d++){
+      const col = String.fromCharCode(67 + d);          // C..I
+      let start = null;
+      for (let di = 0; di <= 15; di++){                 // 15 为哨兵
+        const t = di < 15 ? texts[di][d] : "";
+        if (start !== null && (di === 15 || t !== texts[start][d] || t === "")){
+          if (di - 1 - start >= 1){
+            merges.push(col + (start + 2) + ":" + col + (di + 1));
+            for (let k = start + 1; k < di; k++) skipCells.add(k + "," + d);
+          }
+          start = null;
+        }
+        if (start === null && di < 15 && t !== "") start = di;
+      }
+    }
+
+    /* 4. sharedStrings */
     const ssMap = new Map(), ssArr = [];
     const ssi = s => {
       if (!ssMap.has(s)){ ssMap.set(s, ssArr.length); ssArr.push(s); }
       return ssMap.get(s);
     };
-    headers.forEach(h => ssi(h));
-    rows.forEach(r => r.forEach(v => ssi(v)));
+    ["周一","周二","周三","周四","周五","周六","周日"].forEach(h => ssi(h));
+    rowList.forEach((p, di) => {
+      if (p){ ssi(String(p.n)); ssi(p.t); }
+      for (let d = 0; d < 7; d++) if (texts[di][d] && !skipCells.has(di + "," + d)) ssi(texts[di][d]);
+    });
 
-    /* sheet1.xml：表头加粗（s="1"），全部文本用 shared string */
+    /* 5. sheet1.xml：表头加粗（s="1"） */
+    const widths = [6, 12, 26, 26, 26, 26, 26, 26, 26];
     const colsXml = widths.map((w, i) =>
       '<col min="' + (i+1) + '" max="' + (i+1) + '" width="' + w + '" customWidth="1"/>').join("");
-    let sheetRows = "";
     const cellXml = (r, ci, v, bold) =>
       '<c r="' + String.fromCharCode(65 + ci) + r + '" t="s"' + (bold ? ' s="1"' : "") + "><v>" + ssi(v) + "</v></c>";
-    sheetRows += "<row r=\"1\">" + headers.map((h, i) => cellXml(1, i, h, true)).join("") + "</row>";
-    rows.forEach((r, i) => {
-      sheetRows += "<row r=\"" + (i+2) + "\">" + r.map((v, j) => cellXml(i+2, j, v, false)).join("") + "</row>";
-    });
+    let sheetRows = "";
+    /* 表头行（与原始表一致：A1/B1 空，C1..I1 = 周一~周日） */
+    sheetRows += "<row r=\"1\">" +
+      ["周一","周二","周三","周四","周五","周六","周日"].map((h, i) => cellXml(1, i + 2, h, true)).join("") +
+      "</row>";
+    /* 数据行 */
+    for (let di = 0; di < 15; di++){
+      const rowN = di + 2;
+      const p = rowList[di];
+      const cells = [];
+      if (p){ cells.push(cellXml(rowN, 0, String(p.n), false), cellXml(rowN, 1, p.t, false)); }
+      for (let d = 0; d < 7; d++){
+        if (texts[di][d] && !skipCells.has(di + "," + d)) cells.push(cellXml(rowN, 2 + d, texts[di][d], false));
+      }
+      sheetRows += '<row r="' + rowN + '">' + cells.join("") + "</row>";
+    }
+    const mergeXml = merges.length
+      ? '<mergeCells count="' + merges.length + '">' + merges.map(r => '<mergeCell ref="' + r + '"/>').join("") + "</mergeCells>"
+      : "";
     const sheetXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
       '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
-      "<cols>" + colsXml + "</cols><sheetData>" + sheetRows + "</sheetData></worksheet>";
+      "<cols>" + colsXml + "</cols><sheetData>" + sheetRows + "</sheetData>" + mergeXml + "</worksheet>";
 
     const ssXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
       '<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="' + ssArr.length + '" uniqueCount="' + ssArr.length + '">' +
@@ -1072,7 +1134,7 @@ const Core = {
 
     const wbXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
       '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
-      '<sheets><sheet name="课程总表" sheetId="1" r:id="rId1"/></sheets></workbook>';
+      '<sheets><sheet name="选课排课表" sheetId="1" r:id="rId1"/></sheets></workbook>';
 
     const wbRelsXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
       '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
@@ -1894,12 +1956,14 @@ function downloadBlob(data, filename, mime){
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 300);
 }
 
-/* ② Excel 总表 */
+/* ② Excel 课表（模仿「秋季选课排课表」格式） */
 function exportExcel(){
-  const bytes = Core.buildExcel(state.courses);
-  downloadBlob(bytes, "排课总表_" + Core.fmtDate(new Date()) + ".xlsx",
+  const sched = scheduledCourses();
+  if (!sched.length){ toast("课表中还没有已排课程，无法导出 Excel 课表", "err"); return; }
+  const bytes = Core.buildExcel(sched);
+  downloadBlob(bytes, "选课排课表_" + Core.fmtDate(new Date()) + ".xlsx",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-  toast("已导出 Excel 总表（共 " + state.courses.length + " 门课程）", "ok");
+  toast("已导出 Excel 课表（已排 " + sched.length + " 门课程）", "ok");
 }
 
 /* SVG 字符串 → PNG Blob（浏览器原生能力） */
