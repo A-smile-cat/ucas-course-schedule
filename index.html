@@ -1091,13 +1091,13 @@ const Core = {
     };
     ["时间","周一","周二","周三","周四","周五","周六","周日"].forEach(h => ssi(h));
     rowList.forEach((p, di) => {
-      if (p){ ssi("第" + p.n + "节 " + p.t); }
+      if (p){ ssi("第" + p.n + "节\n" + p.t); }
       else { ssi("休息"); }
       for (let d = 0; d < 7; d++) if (texts[di][d] && !skipCells.has(di + "," + d)) ssi(texts[di][d]);
     });
 
     /* 5. sheet1.xml：表头加粗（s="1"） */
-    const widths = [22, 26, 26, 26, 26, 26, 26, 26];    // A=节次+时间，B..H=周一~周日
+    const widths = [13, 20, 20, 20, 20, 20, 20, 20];    // A=节次+时间（两行），B..H=周一~周日
     const colsXml = widths.map((w, i) =>
       '<col min="' + (i+1) + '" max="' + (i+1) + '" width="' + w + '" customWidth="1"/>').join("");
     const cellXml = (r, ci, v, sIdx) =>
@@ -1107,10 +1107,10 @@ const Core = {
     sheetRows += "<row r=\"1\">" +
       ["时间","周一","周二","周三","周四","周五","周六","周日"].map((h, i) => cellXml(1, i, h, 1)).join("") +
       "</row>";
-    /* 估算一行文本在单元格中占几行（列宽 26 ≈ 每行约 13 个中文字符） */
+    /* 估算一行文本在单元格中占几行（列宽 20 ≈ 每行约 10 个中文字符） */
     const estLines = t => {
       let n = 0;
-      for (const seg of String(t).split("\n")) n += Math.max(1, Math.ceil(seg.length / 13));
+      for (const seg of String(t).split("\n")) n += Math.max(1, Math.ceil(seg.length / 10));
       return n;
     };
     /* 数据行（A 列节次+时间，B..H 列周一~周日）；行高按内容估算并适当加大 */
@@ -1120,7 +1120,8 @@ const Core = {
       const cells = [];
       const isRest = !p;
       if (p){
-        cells.push(cellXml(rowN, 0, "第" + p.n + "节 " + p.t, 1));   // s=1：粗体居中标注节次+时间
+        /* A 列：节次在上、时间范围在下（换行显示，s=4 粗体+换行+居中） */
+        cells.push(cellXml(rowN, 0, "第" + p.n + "节\n" + p.t, 4));
       } else {
         /* 午间/晚间休息行：整行（A..H）合并为灰底单元格，居中标注「休息」 */
         cells.push(cellXml(rowN, 0, "休息", 3));
@@ -1133,8 +1134,8 @@ const Core = {
           lines = Math.max(lines, estLines(texts[di][d]));
         }
       }
-      /* 行高（磅）：休息行 30 / 无课节行 26 / 有课行按内容行数估算 */
-      const ht = isRest ? 30 : (lines ? Math.max(40, Math.min(140, lines * 17 + 8)) : 26);
+      /* 行高（磅）：休息行 30 / 无课节行 34（容纳 A 列节次+时间两行）/ 有课行按内容行数估算 */
+      const ht = isRest ? 30 : (lines ? Math.max(40, Math.min(140, lines * 17 + 8)) : 34);
       sheetRows += '<row r="' + rowN + '" ht="' + ht + '" customHeight="1">' + cells.join("") + "</row>";
     }
     const mergeXml = merges.length
@@ -1180,11 +1181,12 @@ const Core = {
       '<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFD9D9D9"/><bgColor indexed="64"/></patternFill></fill></fills>' +
       '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>' +
       '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
-      '<cellXfs count="4">' +
+      '<cellXfs count="5">' +
       '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>' +
       '<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>' +
       '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment wrapText="1" horizontal="center" vertical="center"/></xf>' +
       '<xf numFmtId="0" fontId="0" fillId="2" borderId="0" xfId="0" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>' +
+      '<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment wrapText="1" horizontal="center" vertical="center"/></xf>' +
       "</cellXfs>" +
       '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>' +
       "</styleSheet>";
