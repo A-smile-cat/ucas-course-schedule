@@ -1027,7 +1027,7 @@ const Core = {
     }
     const diOf = p => p - 1 + (p > 4 ? 1 : 0) + (p > 9 ? 1 : 0);
 
-    /* 1. 聚合每格课程：cell[di][dayIdx] = Map(courseId → {name, weeks:Set}) */
+    /* 1. 聚合每格课程：cell[di][dayIdx] = Map(courseId → {course, weeks:Set}) */
     const cell = Array.from({length: 15}, () => Array.from({length: 7}, () => new Map()));
     for (const c of scheduled){
       for (const s of c.slots || []){
@@ -1036,20 +1036,29 @@ const Core = {
           if (p < 1 || p > 13) continue;
           const m = cell[diOf(p)][s.day - 1];
           let e = m.get(c.id);
-          if (!e){ e = {name: c.name, weeks: new Set()}; m.set(c.id, e); }
+          if (!e){ e = {course: c, weeks: new Set()}; m.set(c.id, e); }
           (s.weeks || []).forEach(w => e.weeks.add(w));
         }
       }
     }
 
-    /* 2. 每格文本：课程名（周次），多门课用「；」分隔；覆盖全部 20 周时省略周次 */
+    /* 2. 每格文本：每门课一个多行信息块（课程名（类别）/ 教师·教室 / ★专业学位课 / 周次），
+           多门课之间以空行分隔；覆盖全部 20 周时省略周次行 */
+    const makeBlock = (c, weeks) => {
+      const lines = [c.name + "（" + c.type + "）"];
+      const meta = [c.teacher, c.location].filter(Boolean).join(" · ");
+      if (meta) lines.push(meta);
+      if (c.dd2) lines.push("★ 专业学位课");
+      if (weeks.length < 20) lines.push(Core.weeksText(weeks));
+      return lines.join("\n");
+    };
     const texts = cell.map(row => row.map(m => {
-      const parts = [];
+      const blocks = [];
       for (const e of m.values()){
         const weeks = [...e.weeks].sort((a, b) => a - b);
-        parts.push(weeks.length >= 20 ? e.name : e.name + "（" + Core.weeksText(weeks) + "）");
+        blocks.push(makeBlock(e.course, weeks));
       }
-      return parts.join("；");
+      return blocks.join("\n\n");   // 课程块间以空行分隔
     }));
 
     /* 3. 合并：按星期列，连续数据行文本相同且非空 → 跨行合并；
@@ -1088,21 +1097,21 @@ const Core = {
     const widths = [6, 12, 26, 26, 26, 26, 26, 26, 26];
     const colsXml = widths.map((w, i) =>
       '<col min="' + (i+1) + '" max="' + (i+1) + '" width="' + w + '" customWidth="1"/>').join("");
-    const cellXml = (r, ci, v, bold) =>
-      '<c r="' + String.fromCharCode(65 + ci) + r + '" t="s"' + (bold ? ' s="1"' : "") + "><v>" + ssi(v) + "</v></c>";
+    const cellXml = (r, ci, v, sIdx) =>
+      '<c r="' + String.fromCharCode(65 + ci) + r + '" t="s"' + (sIdx ? ' s="' + sIdx + '"' : "") + "><v>" + ssi(v) + "</v></c>";
     let sheetRows = "";
-    /* 表头行（与原始表一致：A1/B1 空，C1..I1 = 周一~周日） */
+    /* 表头行（与原始表一致：A1/B1 空，C1..I1 = 周一~周日，粗体 s=1） */
     sheetRows += "<row r=\"1\">" +
-      ["周一","周二","周三","周四","周五","周六","周日"].map((h, i) => cellXml(1, i + 2, h, true)).join("") +
+      ["周一","周二","周三","周四","周五","周六","周日"].map((h, i) => cellXml(1, i + 2, h, 1)).join("") +
       "</row>";
     /* 数据行 */
     for (let di = 0; di < 15; di++){
       const rowN = di + 2;
       const p = rowList[di];
       const cells = [];
-      if (p){ cells.push(cellXml(rowN, 0, String(p.n), false), cellXml(rowN, 1, p.t, false)); }
+      if (p){ cells.push(cellXml(rowN, 0, String(p.n)), cellXml(rowN, 1, p.t)); }
       for (let d = 0; d < 7; d++){
-        if (texts[di][d] && !skipCells.has(di + "," + d)) cells.push(cellXml(rowN, 2 + d, texts[di][d], false));
+        if (texts[di][d] && !skipCells.has(di + "," + d)) cells.push(cellXml(rowN, 2 + d, texts[di][d], 2));  // s=2 自动换行
       }
       sheetRows += '<row r="' + rowN + '">' + cells.join("") + "</row>";
     }
@@ -1115,7 +1124,7 @@ const Core = {
 
     const ssXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
       '<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="' + ssArr.length + '" uniqueCount="' + ssArr.length + '">' +
-      ssArr.map(s => "<si><t>" + esc(s) + "</t></si>").join("") + "</sst>";
+      ssArr.map(s => "<si><t xml:space=\"preserve\">" + esc(s) + "</t></si>").join("") + "</sst>";
 
     const ctXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
       '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
@@ -1145,11 +1154,15 @@ const Core = {
 
     const stylesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
       '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
-      '<fonts count="2"><font><sz val="11"/><name val="宋体"/></font><font><b/><sz val="11"/><name val="宋体"/></font></fonts>' +
+      '<fonts count="2"><font><sz val="10"/><name val="微软雅黑"/></font><font><b/><sz val="10"/><name val="微软雅黑"/></font></fonts>' +
       '<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>' +
       '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>' +
       '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
-      '<cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs>' +
+      '<cellXfs count="3">' +
+      '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
+      '<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>' +
+      '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment wrapText="1" vertical="center"/></xf>' +
+      "</cellXfs>" +
       '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>' +
       "</styleSheet>";
 
